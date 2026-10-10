@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Turret Game</title>
+<style>
+  :root {
+    --bg: #f4f2ee; --panel: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #dedad3;
+    --accent: #d9480f; --accent-soft: #ffe8dc; --ok: #2b8a3e; --ok-soft: #e3f4e6; --hint: #1c7ed6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141416; --panel: #1f1f23; --ink: #ececef; --muted: #9a9aa2; --line: #34343b;
+      --accent: #ff8a4c; --accent-soft: #3a2418; --ok: #51cf66; --ok-soft: #1c3322; --hint: #4dabf7;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 24px; margin-bottom: 8px; }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .stats { display: flex; gap: 20px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--ink); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; }
+  .tool { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 7px 14px; }
+  .tool:hover { border-color: var(--muted); }
+  .tool.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 28px 0 12px; }
+  .turrets { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+  .turret { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 8px 10px;
+            text-align: center; transition: border-color .2s, background .2s; }
+  .turret.done { border-color: var(--ok); background: var(--ok-soft); }
+  .turret.affected { border-color: var(--accent); }
+  .turret svg { width: 92px; height: 92px; display: block; margin: 0 auto 6px; overflow: visible; }
+  .turret .label { font-weight: 600; }
+  .turret .state { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .tick { stroke: var(--line); stroke-width: 2; stroke-linecap: round; }
+  .tick.zero { stroke: var(--ok); stroke-width: 4; }
+  .ring { fill: none; stroke: var(--line); stroke-width: 1.5; }
+  .barrel { transition: transform .45s cubic-bezier(.3, 1.4, .5, 1); }
+  .barrel rect { fill: var(--ink); }
+  .barrel circle { fill: var(--ink); }
+  .ghost { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 3 4; opacity: 0; transition: opacity .15s; }
+  .turret.affected .ghost { opacity: 1; }
+  .delta { color: var(--accent); font-weight: 600; visibility: hidden; font-size: 13px; }
+  .turret.affected .delta { visibility: visible; }
+
+  .buttons { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .btn { position: relative; text-align: left; background: var(--panel); color: var(--ink);
+         border: 1px solid var(--line); padding: 12px 14px; transition: transform .08s, border-color .15s; }
+  .btn:hover { border-color: var(--accent); }
+  .btn:active { transform: scale(.98); }
+  .btn.hint { border-color: var(--hint); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hint) 25%, transparent); }
+  .btn .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .btn .name { font-weight: 600; }
+  .key { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { font-size: 12px; font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: 4px;
+          background: var(--bg); color: var(--muted); }
+  .chip.on { background: var(--accent-soft); color: var(--accent); }
+  .badge { position: absolute; top: -9px; right: -9px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px;
+           background: var(--hint); color: #fff; font-size: 12px; font-weight: 700; display: none;
+           align-items: center; justify-content: center; }
+  .show-solution .badge { display: flex; }
+
+  .banner { display: none; margin-top: 20px; padding: 14px 18px; border-radius: 12px; background: var(--ok-soft);
+            border: 1px solid var(--ok); color: var(--ink); align-items: center; gap: 16px; flex-wrap: wrap; }
+  .banner.visible { display: flex; }
+  .banner strong { color: var(--ok); }
+  .msg { color: var(--muted); min-height: 1.4em; margin-top: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Turret Game</h1>
+    <div class="stats">
+      <span>Moves <b id="moves">0</b></span>
+      <span>Aligned <b id="aligned">0/0</b></span>
+    </div>
+    <div class="toolbar">
+      <button class="tool" id="hint">Hint</button>
+      <button class="tool" id="solution">Show solution</button>
+      <button class="tool" id="reset">Restart</button>
+      <button class="tool primary" id="new">New game</button>
+    </div>
+  </header>
+  <p class="sub">Shuffle mode. Turn every turret to the green mark (state 0). Each button turns several turrets at once by a fixed number of steps.</p>
+
+  <div class="banner" id="banner">
+    <span><strong>All turrets aligned!</strong> Solved in <span id="win-moves"></span> moves.</span>
+    <button class="tool primary" id="again">Play again</button>
+  </div>
+
+  <h2>Turrets</h2>
+  <div class="turrets" id="turrets"></div>
+
+  <h2>Buttons</h2>
+  <div class="buttons" id="buttons"></div>
+  <div class="msg" id="msg"></div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const KEYS = "1234567890";
+let game = null;
+let angles = [];       // accumulated barrel angle per turret, so rotations always go forward
+let solution = null;   // presses still needed per button, from the current state
+let showSolution = false;
+let solutionIsShortest = false;
+
+async function api(path, body = {}) {
+  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+  return res.json();
+}
+
+function dialSVG(t, i) {
+  const n = t.nbr_stats, ticks = [];
+  for (let s = 0; s < n; s++) {
+    const a = (s / n) * 2 * Math.PI;
+    const x1 = 50 + 40 * Math.sin(a), y1 = 50 - 40 * Math.cos(a);
+    const x2 = 50 + 47 * Math.sin(a), y2 = 50 - 47 * Math.cos(a);
+    ticks.push(`<line class="tick${s === 0 ? " zero" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`);
+  }
+  return `<svg viewBox="0 0 100 100" aria-hidden="true">
+    <circle class="ring" cx="50" cy="50" r="34"/>${ticks.join("")}
+    <line class="ghost" id="ghost-${i}" x1="50" y1="50" x2="50" y2="14" style="transform-origin:50px 50px"/>
+    <g class="barrel" id="barrel-${i}" style="transform-origin:50px 50px">
+      <rect x="46.5" y="12" width="7" height="34" rx="2"/><circle cx="50" cy="50" r="13"/>
+    </g></svg>`;
+}
+
+function build() {
+  angles = game.turrets.map((t) => (t.current_stat / t.nbr_stats) * 360);
+  $("turrets").innerHTML = game.turrets.map((t, i) => `
+    <div class="turret" id="turret-${i}">
+      ${dialSVG(t, i)}
+      <div class="label">T${i + 1}</div>
+      <div class="state" id="state-${i}"></div>
+      <div class="delta" id="delta-${i}">&nbsp;</div>
+    </div>`).join("");
+  $("buttons").innerHTML = game.buttons.map((b, j) => `
+    <button class="btn" id="btn-${j}" data-j="${j}">
+      <span class="badge" id="badge-${j}"></span>
+      <div class="top"><span class="name">Button ${j + 1}</span>${j < KEYS.length ? `<span class="key">${KEYS[j]}</span>` : ""}</div>
+      <div class="chips">${b.rotations.map((r, i) => `<span class="chip${r ? " on" : ""}">T${i + 1} +${r}</span>`).join("")}</div>
+    </button>`).join("");
+  document.querySelectorAll(".btn").forEach((el) => {
+    const j = +el.dataset.j;
+    el.addEventListener("click", () => pressButton(j));
+    el.addEventListener("mouseenter", () => preview(j));
+    el.addEventListener("mouseleave", () => preview(null));
+    el.addEventListener("focus", () => preview(j));
+    el.addEventListener("blur", () => preview(null));
+  });
+  render();
+}
+
+function render() {
+  let aligned = 0;
+  game.turrets.forEach((t, i) => {
+    $(`barrel-${i}`).style.transform = `rotate(${angles[i]}deg)`;
+    $(`state-${i}`).textContent = `state ${t.current_stat} / ${t.nbr_stats}`;
+    $(`turret-${i}`).classList.toggle("done", t.current_stat === 0);
+    if (t.current_stat === 0) aligned++;
+  });
+  $("moves").textContent = game.moves;
+  $("aligned").textContent = `${aligned}/${game.turrets.length}`;
+  $("banner").classList.toggle("visible", game.won);
+  $("win-moves").textContent = game.moves;
+  $("buttons").classList.toggle("show-solution", showSolution && !!solution);
+  game.buttons.forEach((_, j) => {
+    $(`badge-${j}`).textContent = solution ? `×${solution[j]}` : "";
+    $(`btn-${j}`).classList.remove("hint");
+  });
+}
+
+function preview(j) {
+  game.turrets.forEach((t, i) => {
+    const r = j === null ? 0 : game.buttons[j].rotations[i];
+    $(`turret-${i}`).classList.toggle("affected", r !== 0);
+    if (r) {
+      const next = (t.current_stat + r) % t.nbr_stats;
+      $(`ghost-${i}`).style.transform = `rotate(${(next / t.nbr_stats) * 360}deg)`;
+      $(`delta-${i}`).textContent = `+${r} → ${next}`;
+    }
+  });
+}
+
+async function pressButton(j) {
+  if (!game || game.won) return;
+  const before = game.turrets.map((t) => t.current_stat);
+  game = { ...game, ...(await api("/api/press", { id: game.id, button: j })) };
+  game.turrets.forEach((t, i) => {
+    const step = (t.current_stat - before[i] + t.nbr_stats) % t.nbr_stats;
+    angles[i] += (step / t.nbr_stats) * 360;
+  });
+  if (game.won || !showSolution) solution = null;
+  // what is left of a shortest solution is still a shortest solution
+  else if (solution && solution[j] > 0) solution[j]--;
+  else solution = await fetchSolution();
+  $("msg").textContent = "";
+  render();
+  preview(document.querySelector(".btn:hover") ? j : null);
+  if (game.won) $("again").focus();
+}
+
+async function fetchSolution() {
+  const res = await api("/api/solve", { id: game.id });
+  if (!res.solvable) { $("msg").textContent = "This position has no solution."; return null; }
+  solutionIsShortest = res.shortest;
+  return res.presses;
+}
+
+async function newGame() {
+  game = await api("/api/new");
+  solution = null; showSolution = false;
+  $("solution").textContent = "Show solution";
+  $("msg").textContent = "";
+  build();
+}
+
+$("new").onclick = newGame;
+$("again").onclick = newGame;
+$("reset").onclick = async () => {
+  game = { ...game, ...(await api("/api/reset", { id: game.id })) };
+  solution = null; showSolution = false;
+  $("solution").textContent = "Show solution";
+  build();
+};
+$("solution").onclick = async () => {
+  showSolution = !showSolution;
+  $("solution").textContent = showSolution ? "Hide solution" : "Show solution";
+  if (showSolution) {
+    solution = await fetchSolution();
+    if (solution) {
+      const total = solution.reduce((a, b) => a + b, 0);
+      $("msg").textContent = total ? `Press each button the number of times on its badge (${total} presses, any order${solutionIsShortest ? ", shortest possible" : ""}).` : "";
+    }
+  } else { solution = null; $("msg").textContent = ""; }
+  render();
+};
+$("hint").onclick = async () => {
+  if (game.won) return;
+  const presses = await fetchSolution();
+  if (!presses) return;
+  const j = presses.findIndex((p) => p > 0);
+  render();
+  $(`btn-${j}`).classList.add("hint");
+  $("msg").textContent = `Try Button ${j + 1}.`;
+};
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const j = KEYS.indexOf(e.key);
+  if (game && j >= 0 && j < game.buttons.length) pressButton(j);
+});
+
+newGame();
+</script>
+</body>
+</html>
